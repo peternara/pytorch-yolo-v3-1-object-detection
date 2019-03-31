@@ -1,93 +1,95 @@
-# A PyTorch implementation of a YOLO v3 Object Detector
+# PyTorch-YOLOv3
+Minimal implementation of YOLOv3 in PyTorch.
 
-[UPDATE] : This repo serves as a driver code for my research. I just graduated college, and am very busy looking for research internship / fellowship roles before eventually applying for a masters. I won't have the time to look into issues for the time being. Thank you.
+## Table of Contents
+- [PyTorch-YOLOv3](#pytorch-yolov3)
+  * [Table of Contents](#table-of-contents)
+  * [Paper](#paper)
+  * [Installation](#installation)
+  * [Inference](#inference)
+  * [Test](#test)
+  * [Train](#train)
+  * [Credit](#credit)
 
+## Paper
+### YOLOv3: An Incremental Improvement
+_Joseph Redmon, Ali Farhadi_ <br>
 
-This repository contains code for a object detector based on [YOLOv3: An Incremental Improvement](https://pjreddie.com/media/files/papers/YOLOv3.pdf), implementedin PyTorch. The code is based on the official code of [YOLO v3](https://github.com/pjreddie/darknet), as well as a PyTorch 
-port of the original code, by [marvis](https://github.com/marvis/pytorch-yolo2). One of the goals of this code is to improve
-upon the original port by removing redundant parts of the code (The official code is basically a fully blown deep learning 
-library, and includes stuff like sequence models, which are not used in YOLO). I've also tried to keep the code minimal, and 
-document it as well as I can. 
+**Abstract** <br>
+We present some updates to YOLO! We made a bunch
+of little design changes to make it better. We also trained
+this new network that’s pretty swell. It’s a little bigger than
+last time but more accurate. It’s still fast though, don’t
+worry. At 320 × 320 YOLOv3 runs in 22 ms at 28.2 mAP,
+as accurate as SSD but three times faster. When we look
+at the old .5 IOU mAP detection metric YOLOv3 is quite
+good. It achieves 57.9 AP50 in 51 ms on a Titan X, compared
+to 57.5 AP50 in 198 ms by RetinaNet, similar performance
+but 3.8× faster. As always, all the code is online at
+https://pjreddie.com/yolo/.
 
-### Tutorial for building this detector from scratch
-If you want to understand how to implement this detector by yourself from scratch, then you can go through this very detailed 5-part tutorial series I wrote on Paperspace. Perfect for someone who wants to move from beginner to intermediate pytorch skills. 
+[[Paper]](https://pjreddie.com/media/files/papers/YOLOv3.pdf) [[Original Implementation]](https://github.com/pjreddie/darknet)
 
-[Implement YOLO v3 from scratch](https://blog.paperspace.com/how-to-implement-a-yolo-object-detector-in-pytorch/)
+## Installation
+    $ git clone https://github.com/eriklindernoren/PyTorch-YOLOv3
+    $ cd PyTorch-YOLOv3/
+    $ sudo pip3 install -r requirements.txt
 
-As of now, the code only contains the detection module, but you should expect the training module soon. :) 
+##### Download pretrained weights
+    $ cd weights/
+    $ bash download_weights.sh
 
-## Requirements
-1. Python 3.5
-2. OpenCV
-3. PyTorch 0.4
+##### Download COCO
+    $ cd data/
+    $ bash get_coco_dataset.sh
 
-Using PyTorch 0.3 will break the detector.
+## Inference
+Uses pretrained weights to make predictions on images. Below table displays the inference times when using as inputs images scaled to 256x256. The ResNet backbone measurements are taken from the YOLOv3 paper. The Darknet-53 measurement marked shows the inference time of this implementation on my 1080ti card.
 
+| Backbone                | GPU      | FPS      |
+| ----------------------- |:--------:|:--------:|
+| ResNet-101              | Titan X  | 53       |
+| ResNet-152              | Titan X  | 37       |
+| Darknet-53 (paper)      | Titan X  | 76       |
+| Darknet-53 (this impl.) | 1080ti   | 74       |
 
+    $ python3 detect.py --image_folder /data/samples
 
-## Detection Example
+<p align="center"><img src="assets/giraffe.png" width="480"\></p>
+<p align="center"><img src="assets/dog.png" width="480"\></p>
+<p align="center"><img src="assets/traffic.png" width="480"\></p>
+<p align="center"><img src="assets/messi.png" width="480"\></p>
 
-![Detection Example](https://i.imgur.com/m2jwneng.png)
-## Running the detector
+## Test
+Evaluates the model on COCO test.
 
-### On single or multiple images
+    $ python3 test.py --weights_path weights/yolov3.weights
 
-Clone, and `cd` into the repo directory. The first thing you need to do is to get the weights file
-This time around, for v3, authors has supplied a weightsfile only for COCO [here](https://pjreddie.com/media/files/yolov3.weights), and place 
+| Model                   | mAP (min. 50 IoU) |
+| ----------------------- |:----------------:|
+| YOLOv3 (paper)          | 57.9             |
+| YOLOv3 (this impl.)     | 58.2             |
 
-the weights file into your repo directory. Or, you could just type (if you're on Linux)
-
+## Train
+Data augmentation as well as additional training tricks remains to be implemented. PRs are welcomed!
 ```
-wget https://pjreddie.com/media/files/yolov3.weights 
-python detect.py --images imgs --det det 
-```
-
-
-`--images` flag defines the directory to load images from, or a single image file (it will figure it out), and `--det` is the directory
-to save images to. Other setting such as batch size (using `--bs` flag) , object threshold confidence can be tweaked with flags that can be looked up with. 
-
-```
-python detect.py -h
-```
-
-### Speed Accuracy Tradeoff
-You can change the resolutions of the input image by the `--reso` flag. The default value is 416. Whatever value you chose, rememeber **it should be a multiple of 32 and greater than 32**. Weird things will happen if you don't. You've been warned. 
-
-```
-python detect.py --images imgs --det det --reso 320
-```
-
-### On Video
-For this, you should run the file, video_demo.py with --video flag specifying the video file. The video file should be in .avi format
-since openCV only accepts OpenCV as the input format. 
-
-```
-python video_demo.py --video video.avi
-```
-
-Tweakable settings can be seen with -h flag. 
-
-### Speeding up Video Inference
-
-To speed video inference, you can try using the video_demo_half.py file instead which does all the inference with 16-bit half 
-precision floats instead of 32-bit float. I haven't seen big improvements, but I attribute that to having an older card 
-(Tesla K80, Kepler arch). If you have one of cards with fast float16 support, try it out, and if possible, benchmark it. 
-
-### On a Camera
-Same as video module, but you don't have to specify the video file since feed will be taken from your camera. To be precise, 
-feed will be taken from what the OpenCV, recognises as camera 0. The default image resolution is 160 here, though you can change it with `reso` flag.
-
-```
-python cam_demo.py
-```
-You can easily tweak the code to use different weightsfiles, available at [yolo website](https://pjreddie.com/darknet/yolo/)
-
-NOTE: The scales features has been disabled for better refactoring.
-### Detection across different scales
-YOLO v3 makes detections across different scales, each of which deputise in detecting objects of different sizes depending upon whether they capture coarse features, fine grained features or something between. You can experiment with these scales by the `--scales` flag. 
-
-```
-python detect.py --scales 1,3
+    train.py [-h] [--epochs EPOCHS] [--image_folder IMAGE_FOLDER]
+                [--batch_size BATCH_SIZE]
+                [--model_config_path MODEL_CONFIG_PATH]
+                [--data_config_path DATA_CONFIG_PATH]
+                [--weights_path WEIGHTS_PATH] [--class_path CLASS_PATH]
+                [--conf_thres CONF_THRES] [--nms_thres NMS_THRES]
+                [--n_cpu N_CPU] [--img_size IMG_SIZE]
+                [--checkpoint_interval CHECKPOINT_INTERVAL]
+                [--checkpoint_dir CHECKPOINT_DIR]
 ```
 
-
+## Credit
+```
+@article{yolov3,
+  title={YOLOv3: An Incremental Improvement},
+  author={Redmon, Joseph and Farhadi, Ali},
+  journal = {arXiv},
+  year={2018}
+}
+```
