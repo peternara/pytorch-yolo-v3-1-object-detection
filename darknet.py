@@ -263,8 +263,11 @@ def create_modules(blocks):
             
             
             anchors = x["anchors"].split(",")
+            # print("anchors...:",anchors)
             anchors = [int(a) for a in anchors]
             anchors = [(anchors[i], anchors[i+1]) for i in range(0, len(anchors),2)]
+            # print("anchors 2:",anchors)
+            # print("mask:",mask)
             anchors = [anchors[i] for i in mask]
             
             detection = DetectionLayer(anchors)
@@ -292,6 +295,10 @@ class Darknet(nn.Module):
         super(Darknet, self).__init__()
         self.blocks = parse_cfg(cfgfile)
         self.net_info, self.module_list = create_modules(self.blocks)
+
+        # print("self net_info:",self.net_info)
+        # print("self module_list:",self.module_list)
+
         self.header = torch.IntTensor([0,0,0,0])
         self.seen = 0
 
@@ -306,7 +313,9 @@ class Darknet(nn.Module):
                 
     def forward(self, x, CUDA):
         detections = []
+        # print("line 316 forward..")
         modules = self.blocks[1:]
+        # print("modules:",modules)
         outputs = {}   #We cache the outputs for the route layer
         
         
@@ -315,34 +324,41 @@ class Darknet(nn.Module):
             
             module_type = (modules[i]["type"])
             if module_type == "convolutional" or module_type == "upsample" or module_type == "maxpool":
-                
+
+                # print("line 328:",i,' ',self.module_list[i])
                 x = self.module_list[i](x)
                 outputs[i] = x
 
                 
             elif module_type == "route":
                 layers = modules[i]["layers"]
+
                 layers = [int(a) for a in layers]
                 
                 if (layers[0]) > 0:
                     layers[0] = layers[0] - i
 
                 if len(layers) == 1:
+
                     x = outputs[i + (layers[0])]
+
 
                 else:
                     if (layers[1]) > 0:
                         layers[1] = layers[1] - i
                         
                     map1 = outputs[i + layers[0]]
+                    # print("line 352:",i,' ',' ',layers[1],i+layers[1])
                     map2 = outputs[i + layers[1]]
                     
                     
                     x = torch.cat((map1, map2), 1)
+                    # print("line 356:",x.shape)
                 outputs[i] = x
             
             elif  module_type == "shortcut":
                 from_ = int(modules[i]["from"])
+                # print("shutcut line 361:",i,' ',i+from_)
                 x = outputs[i-1] + outputs[i+from_]
                 outputs[i] = x
                 
@@ -353,14 +369,19 @@ class Darknet(nn.Module):
                 anchors = self.module_list[i][0].anchors
                 #Get the input dimensions
                 inp_dim = int (self.net_info["height"])
+                # print("inp_dim line 372:",inp_dim)
+                # print("anchors:",anchors)
                 
                 #Get the number of classes
                 num_classes = int (modules[i]["classes"])
+                # print("num_classes:",num_classes)
                 
                 #Output the result
                 x = x.data
+                # print("x shape:",x.shape)
                 x = predict_transform(x, inp_dim, anchors, num_classes, CUDA)
-                
+
+                # print("x:",x.shape)
                 if type(x) == int:
                     continue
 
@@ -520,9 +541,15 @@ class Darknet(nn.Module):
 
 
 
+# #
+# dn = Darknet('cfg/yolov3.cfg')
+# dn.load_weights("yolov3.weights")
+
+# x=torch.tensor([[1,2,3]])
 #
-#dn = Darknet('cfg/yolov3.cfg')
-#dn.load_weights("yolov3.weights")
+# y=torch.tensor([[3]])
+#
+# print(x*y)
 #inp = get_test_input()
 #a, interms = dn(inp)
 #dn.eval()

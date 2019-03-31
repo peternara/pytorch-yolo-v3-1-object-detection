@@ -77,6 +77,7 @@ def arg_parse():
     return parser.parse_args()
 
 if __name__ ==  '__main__':
+    write = False
     args = arg_parse()
     
     scales = args.scales
@@ -106,6 +107,7 @@ if __name__ ==  '__main__':
     confidence = float(args.confidence)
     nms_thesh = float(args.nms_thresh)
     start = 0
+    # print("batch size:",batch_size,confidence,nms_thesh)
 
     CUDA = torch.cuda.is_available()
 
@@ -120,6 +122,8 @@ if __name__ ==  '__main__':
     
     model.net_info["height"] = args.reso
     inp_dim = int(model.net_info["height"])
+
+    # print("line 216.",args.reso,inp_dim)  inp_dim :416
     assert inp_dim % 32 == 0 
     assert inp_dim > 32
 
@@ -146,11 +150,15 @@ if __name__ ==  '__main__':
         os.makedirs(args.det)
         
     load_batch = time.time()
-    
+
+
     batches = list(map(prep_image, imlist, [inp_dim for x in range(len(imlist))]))
-    im_batches = [x[0] for x in batches]
+    im_batches = [x[0] for x in batches]  # 处理后的图像宽度是416
     orig_ims = [x[1] for x in batches]
-    im_dim_list = [x[2] for x in batches]
+    im_dim_list = [x[2] for x in batches]  # 处理之前的图像宽度
+
+
+
     im_dim_list = torch.FloatTensor(im_dim_list).repeat(1,2)
     
     
@@ -173,7 +181,7 @@ if __name__ ==  '__main__':
     i = 0
     
 
-    write = False
+
     model(get_test_input(inp_dim, CUDA), CUDA)
     
     start_det_loop = time.time()
@@ -195,8 +203,9 @@ if __name__ ==  '__main__':
         # B x (bbox cord x no. of anchors) x grid_w x grid_h --> B x bbox x (all the boxes) 
         # Put every proposed box as a row.
         with torch.no_grad():
-            prediction = model(Variable(batch), CUDA)
-        
+            prediction = model(Variable(batch), CUDA)   # 输出torch.Size([1, 10647, 85])
+
+
 #        prediction = prediction[:,scale_indices]
 
         
@@ -207,11 +216,14 @@ if __name__ ==  '__main__':
         #But both these operations require looping, hence 
         #clubbing these ops in one loop instead of two. 
         #loops are slower than vectorised operations. 
+
+        print('>>>>>output shape:', prediction.shape)
+
+        prediction2 = write_results(prediction, confidence, num_classes, nms = True, nms_conf = nms_thesh)
+
+
         
-        prediction = write_results(prediction, confidence, num_classes, nms = True, nms_conf = nms_thesh)
-        
-        
-        if type(prediction) == int:
+        if type(prediction2) == int:
             i += 1
             continue
 
@@ -222,17 +234,16 @@ if __name__ ==  '__main__':
 
             
 
-        prediction[:,0] += i*batch_size
+        prediction2[:,0] += i*batch_size
         
-    
-            
-          
-        if not write:
-            output = prediction
-            write = 1
+
+        if write ==False:
+
+            output = prediction2
+            write = True
         else:
-            output = torch.cat((output,prediction))
-            
+            # output = torch.cat((output,prediction2))
+            output=prediction2
         
         
 

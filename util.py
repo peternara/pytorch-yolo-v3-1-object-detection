@@ -28,12 +28,26 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
     grid_size = inp_dim // stride
     bbox_attrs = 5 + num_classes
     num_anchors = len(anchors)
+
+    # stride 分别是    32， 16,   8
+    # 对应的grid size: 13, 26 ,  52
+    # anchors  分别是[(116, 90), (156, 198), (373, 326)]
+    #               [(30, 61), (62, 45), (59, 119)]
+    #               [(10, 13), (16, 30), (33, 23)]
     
     anchors = [(a[0]/stride, a[1]/stride) for a in anchors]
+    # print("anchors:",anchors)
 
-
-
+    # print("line 41...:",prediction.shape)
+    # shape[1,255,13,13]
+    #       [1,255,26,26]
+    #       [1,255,52,52]
     prediction = prediction.view(batch_size, bbox_attrs*num_anchors, grid_size*grid_size)
+
+    #[1,255,169]
+    #[1,255,676]
+    #[1,255,2704]
+    # print("line 43...:",prediction.shape)
     prediction = prediction.transpose(1,2).contiguous()
     prediction = prediction.view(batch_size, grid_size*grid_size*num_anchors, bbox_attrs)
 
@@ -48,7 +62,8 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
     #Add the center offsets
     grid_len = np.arange(grid_size)
     a,b = np.meshgrid(grid_len, grid_len)
-    
+
+
     x_offset = torch.FloatTensor(a).view(-1,1)
     y_offset = torch.FloatTensor(b).view(-1,1)
     
@@ -57,7 +72,7 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
         y_offset = y_offset.cuda()
     
     x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1,num_anchors).view(-1,2).unsqueeze(0)
-    
+    # print("x_yoffset:",x_y_offset)
     prediction[:,:,:2] += x_y_offset
       
     #log space transform height and the width
@@ -65,12 +80,14 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA = True):
     
     if CUDA:
         anchors = anchors.cuda()
-    
+
+    # print("line 84:",anchors.shape)
     anchors = anchors.repeat(grid_size*grid_size, 1).unsqueeze(0)
     prediction[:,:,2:4] = torch.exp(prediction[:,:,2:4])*anchors
 
     #Softmax the class scores
     prediction[:,:,5: 5 + num_classes] = torch.sigmoid((prediction[:,:, 5 : 5 + num_classes]))
+
 
     prediction[:,:,:4] *= stride
    
@@ -98,6 +115,11 @@ def unique(tensor):
 
 def write_results(prediction, confidence, num_classes, nms = True, nms_conf = 0.4):
     conf_mask = (prediction[:,:,4] > confidence).float().unsqueeze(2)
+
+
+    print("write_result size: line 120",prediction.shape)
+    # print("conf_mask:",conf_mask.shape)
+    # print("prediction ?: shape:",prediction.shape)
     prediction = prediction*conf_mask
     
 
@@ -119,6 +141,8 @@ def write_results(prediction, confidence, num_classes, nms = True, nms_conf = 0.
     batch_size = prediction.size(0)
     
     output = prediction.new(1, prediction.size(2) + 1)
+
+    # print("output new:",output.shape)
     write = False
 
 
@@ -133,29 +157,38 @@ def write_results(prediction, confidence, num_classes, nms = True, nms_conf = 0.
         #Add the class index and the class score of class having maximum score
         max_conf, max_conf_score = torch.max(image_pred[:,5:5+ num_classes], 1)
         max_conf = max_conf.float().unsqueeze(1)
+        # print("max_conf:",max_conf)
+        # print("max_socre:",np.where(max_conf_score.cpu().numpy()>0))
         max_conf_score = max_conf_score.float().unsqueeze(1)
         seq = (image_pred[:,:5], max_conf, max_conf_score)
         image_pred = torch.cat(seq, 1)
         
 
-        
+        # print("before nonzero:",image_pred.shape)
         #Get rid of the zero entries
         non_zero_ind =  (torch.nonzero(image_pred[:,4]))
+        # print("after nonzerro:",image_pred[non_zero_ind.squeeze(),:].shape)
 
+        # print("..:",image_pred[non_zero_ind.squeeze(),:].view(-1,7))
         
         image_pred_ = image_pred[non_zero_ind.squeeze(),:].view(-1,7)
-        
+
+        # print("image_pred:",image_pred_.shape)
+
         #Get the various classes detected in the image
         try:
             img_classes = unique(image_pred_[:,-1])
         except:
              continue
+
+        # print("classes:",img_classes)
         #WE will do NMS classwise
         for cls in img_classes:
             #get the detections with one particular class
             cls_mask = image_pred_*(image_pred_[:,-1] == cls).float().unsqueeze(1)
+            # print("cal_mask:",cls_mask)
             class_mask_ind = torch.nonzero(cls_mask[:,-2]).squeeze()
-            
+            # print("class_mask_ind:",class_mask_ind)
 
             image_pred_class = image_pred_[class_mask_ind].view(-1,7)
 
@@ -205,8 +238,9 @@ def write_results(prediction, confidence, num_classes, nms = True, nms_conf = 0.
                 write = True
             else:
                 out = torch.cat(seq,1)
-                output = torch.cat((output,out))
-    
+                output = torch.cat((output,out),0)
+
+    # print("lin 214  output size:",output.shape)
     return output
 
 #!/usr/bin/env python3
